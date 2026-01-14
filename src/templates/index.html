@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>🎥 Object Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 5px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px;
+            text-align: center;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            margin-bottom: 1px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 0.75em;
+            opacity: 0.9;
+        }
+
+        .container {
+            display: flex;
+            gap: 6px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* LEFT SIDE - VIDEO (70%) */
+        .video-panel {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            background: white;
+            border-radius: 8px;
+            padding: 6px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            min-height: 0;
+        }
+
+        .video-container {
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            flex: 1;
+            min-height: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+        }
+
+        .stat-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .stat-item .label {
+            font-size: 0.65em;
+            opacity: 0.9;
+            margin-bottom: 2px;
+        }
+
+        .stat-item .value {
+            font-size: 1.3em;
+            font-weight: 700;
+        }
+
+        .status {
+            padding: 5px;
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.8em;
+        }
+
+        /* RIGHT SIDE - DETECTIONS (30%) */
+        .detection-panel {
+            flex: 1.2;
+            background: white;
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .detection-panel h2 {
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 0.95em;
+            flex-shrink: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+
+        .detection-list {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 120px;
+        }
+
+        .detection-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease-out;
+            flex-shrink: 0;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .object-name {
+            font-weight: 700;
+            font-size: 0.8em;
+        }
+
+        .frame-number {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .no-detection {
+            color: #999;
+            text-align: center;
+            padding: 15px;
+            opacity: 0.6;
+            font-size: 0.85em;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 5px;
+            margin-top: 6px;
+            flex-shrink: 0;
+        }
+
+        button {
+            flex: 1;
+            padding: 6px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.8em;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 2px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e8e8e8;
+        }
+
+        /* MOBILE - Stack vertically */
+        @media (max-width: 1024px) {
+            .container {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .video-panel, .detection-panel {
+                flex: 1;
+                min-height: 280px;
+            }
+
+            .detection-list {
+                max-height: 150px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+
+            .header {
+                padding: 8px;
+                margin-bottom: 5px;
+            }
+
+            .header h1 {
+                font-size: 1.4em;
+            }
+
+            .header p {
+                font-size: 0.8em;
+            }
+
+            .container {
+                gap: 8px;
+            }
+
+            .video-panel, .detection-panel {
+                padding: 8px;
+            }
+
+            .video-container {
+                min-height: 250px;
+            }
+
+            .stats-bar {
+                gap: 6px;
+            }
+
+            .stat-item {
+                padding: 8px;
+            }
+
+            .stat-item .value {
+                font-size: 1.3em;
+            }
+
+            .detection-panel h2 {
+                font-size: 0.95em;
+                margin-bottom: 8px;
+            }
+
+            .detection-item {
+                padding: 8px;
+                font-size: 0.85em;
+            }
+
+            button {
+                padding: 8px;
+                font-size: 0.85em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 4px;
+            }
+
+            .header {
+                padding: 6px;
+                margin-bottom: 4px;
+                border-radius: 8px;
+            }
+
+            .header h1 {
+                font-size: 1.2em;
+                margin-bottom: 1px;
+            }
+
+            .header p {
+                font-size: 0.7em;
+            }
+
+            .container {
+                gap: 6px;
+            }
+
+            .video-panel {
+                padding: 6px;
+                gap: 6px;
+            }
+
+            .detection-panel {
+                padding: 8px;
+                min-height: 200px;
+            }
+
+            .video-container {
+                min-height: 200px;
+                border-radius: 8px;
+            }
+
+            .stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 5px;
+            }
+
+            .stat-item {
+                padding: 6px;
+                border-radius: 6px;
+            }
+
+            .stat-item .label {
+                font-size: 0.65em;
+                margin-bottom: 2px;
+            }
+
+            .stat-item .value {
+                font-size: 1.2em;
+            }
+
+            .status {
+                font-size: 0.8em;
+                padding: 6px;
+            }
+
+            .detection-panel h2 {
+                font-size: 0.85em;
+                margin-bottom: 6px;
+            }
+
+            .detection-list {
+                max-height: 150px;
+                gap: 5px;
+            }
+
+            .detection-item {
+                padding: 6px;
+                font-size: 0.75em;
+            }
+
+            .frame-number {
+                padding: 2px 6px;
+                font-size: 0.65em;
+            }
+
+            .buttons {
+                gap: 6px;
+                margin-top: 6px;
+            }
+
+            button {
+                padding: 6px;
+                font-size: 0.75em;
+                border-radius: 6px;
+            }
+        }
+
+        /* Scrollbar styling */
+        .detection-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .detection-list::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        .detection-list::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        .detection-list::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <div class="header">
+        <h1>🎥 Object Detection</h1>
+        <p>Real-time YOLOv8 Detection System</p>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="container">
+        <!-- LEFT: VIDEO PANEL (70%) -->
+        <div class="video-panel">
+            <div class="video-container">
+                <img id="video-stream" src="/video_feed" alt="Live Detection Feed">
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="label">📊 Frames</div>
+                    <div class="value" id="frame-count">0</div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="label">⚡ FPS</div>
+                    <div class="value" id="fps">0</div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="label">⏱️ Time</div>
+                    <div class="value" id="elapsed">0s</div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="label">🎯 Objects</div>
+                    <div class="value" id="detections">0</div>
+                </div>
+            </div>
+
+            <div class="status">
+                🔴 LIVE DETECTION
+            </div>
+        </div>
+
+        <!-- RIGHT: DETECTION PANEL (30%) -->
+        <div class="detection-panel">
+            <h2>🏷️ Detected</h2>
+            <div class="detection-list" id="detection-types">
+                <div class="no-detection">Scanning...</div>
+            </div>
+            <div class="buttons">
+                <button class="btn-primary" onclick="refreshStats()">🔄 Refresh</button>
+                <button class="btn-secondary" onclick="location.reload()">↻ Reload</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Store detections with frame numbers
+        let detectionHistory = {};
+
+        function updateStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('frame-count').textContent = data.frame_count;
+                    document.getElementById('fps').textContent = data.fps;
+                    document.getElementById('elapsed').textContent = data.elapsed + 's';
+                    document.getElementById('detections').textContent = data.detections;
+
+                    // Update detection types with frame numbers
+                    const detectionTypes = data.detection_types || [];
+                    const currentFrame = data.frame_count;
+
+                    // Track each detection
+                    detectionTypes.forEach(detection => {
+                        if (!detectionHistory[detection]) {
+                            detectionHistory[detection] = currentFrame;
+                        }
+                    });
+
+                    // Display all detected objects with frame info
+                    const detectionDiv = document.getElementById('detection-types');
+
+                    if (Object.keys(detectionHistory).length > 0) {
+                        detectionDiv.innerHTML = Object.entries(detectionHistory)
+                            .map(([obj, frame]) => `
+                                <div class="detection-item">
+                                    <span class="object-name">✓ ${obj}</span>
+                                    <span class="frame-number">Frame #${frame}</span>
+                                </div>
+                            `)
+                            .join('');
+                    } else {
+                        detectionDiv.innerHTML = '<div class="no-detection">Scanning...</div>';
+                    }
+                })
+                .catch(err => console.log('Stats update failed:', err));
+        }
+
+        function refreshStats() {
+            updateStats();
+        }
+
+        // Update stats on load and every 500ms
+        updateStats();
+        setInterval(updateStats, 500);
+
+        window.addEventListener('load', function() {
+            console.log('✅ Detection System loaded');
+        });
+    </script>
+</body>
+</html>
