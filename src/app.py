@@ -1,116 +1,128 @@
 from flask import Flask, render_template, Response, jsonify
 import cv2
-import threading
-from ultralytics import YOLO
 import time
-import webbrowser
-from datetime import datetime
+import numpy as np
+from ultralytics import YOLO
+from sort.sort import Sort
 
 app = Flask(__name__)
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-class ObjectDetectionApp:
-    def __init__(self):
-        self.cap = cv2.VideoCapture(0)
-        self.detector = YOLO("yolov8n.pt")
-        self.frame_count = 0
-        self.start_time = time.time()
-        self.running = True
-        self.detections_list = []
-        
-    def get_frame(self):
-        """Get annotated frame"""
-        ret, frame = self.cap.read()
-        if not ret:
-            return None
-            
-        self.frame_count += 1
-        
-        # Run detection
-        results = self.detector(frame)
-        annotated_frame = results[0].plot()
-        
-        # Get detection info
-        if results[0].boxes:
-            self.detections_list = [self.detector.names[int(cls)] for cls in results[0].boxes.cls]
-        else:
-            self.detections_list = []
-        
-        # Add frame info
-        elapsed = time.time() - self.start_time
-        fps = self.frame_count / elapsed if elapsed > 0 else 0
-        cv2.putText(annotated_frame, f"Frame: {self.frame_count}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-        cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 65),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-        
-        # Encode frame
-        ret, buffer = cv2.imencode('.jpg', annotated_frame)
-        frame_bytes = buffer.tobytes()
-        
-        return frame_bytes
-    
-    def get_stats(self):
-        """Get app statistics"""
-        elapsed = time.time() - self.start_time
-        fps = self.frame_count / elapsed if elapsed > 0 else 0
-        return {
-            'frame_count': self.frame_count,
-            'fps': round(fps, 1),
-            'elapsed': round(elapsed, 1),
-            'detections': len(self.detections_list),
-            'detection_types': list(set(self.detections_list))[:5]
-        }
-    
-    def close(self):
-        """Cleanup"""
-        self.running = False
-        self.cap.release()
+# ---------------- CONFIG ----------------
+VIDEO_PATH = "data/videos/test_video.mp4"
+model = YOLO("yolov8n.pt")
+tracker = Sort(max_age=20, min_hits=3, iou_threshold=0.3)
 
-# Initialize app
-detector_app = ObjectDetectionApp()
+cap = None
+current_source = None
 
-@app.route('/')
+frame_count = 0
+start_time = time.time()
+last_labels = []
+
+# ---------------- VIDEO HANDLER ----------------
+def open_source(source):
+    global cap, current_source, frame_count, start_time, tracker
+    if cap:
+        cap.release()
+
+    if source == "webcam":
+        cap = cv2.VideoCapture(0)
+    else:
+        cap = cv2.VideoCapture(VIDEO_PATH)
+
+    tracker = Sort()
+    frame_count = 0
+    start_time = time.time()
+    current_source = source
+
+
+def generate_frames():
+    global frame_count, last_labels
+
+    while cap and cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            break
+
+        frame_count += 1
+        last_labels = []
+
+        results = model(frame, stream=True)
+        detections = []
+
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                conf = float(box.conf[0])
+                cls = int(box.cls[0])
+
+                if conf > 0.4:
+                    detections.append([x1, y1, x2, y2, conf])
+                    last_labels.append(model.names[cls])
+
+        detections = np.array(detections)
+        if len(detections) == 0:
+            detections = np.empty((0, 5))
+
+        tracked = tracker.update(detections)
+
+        for obj in tracked:
+            x1, y1, x2, y2, obj_id = map(int, obj)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(
+                frame,
+                f"ID {obj_id}",
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+            )
+
+        ret, buffer = cv2.imencode(".jpg", frame)
+        frame = buffer.tobytes()
+
+        yield (
+            b"--frame\r\n"
+            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+        )
+
+
+# ---------------- ROUTES ----------------
+@app.route("/")
 def index():
-    """Serve main page"""
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/video_feed')
+
+@app.route("/video_feed/webcam")
+def webcam_feed():
+    open_source("webcam")
+    return Response(generate_frames(),
+                    mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@app.route("/video_feed/video")
 def video_feed():
-    """Stream video frames"""
-    def generate():
-        while detector_app.running:
-            frame = detector_app.get_frame()
-            if frame is None:
-                break
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-    
-    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    open_source("video")
+    return Response(generate_frames(),
+                    mimetype="multipart/x-mixed-replace; boundary=frame")
 
-@app.route('/stats')
+
+@app.route("/stats")
 def stats():
-    """Get detection stats"""
-    return jsonify(detector_app.get_stats())
+    elapsed = time.time() - start_time
+    fps = frame_count / elapsed if elapsed > 0 else 0
 
-if __name__ == '__main__':
-    # Open browser
-    webbrowser.open('http://localhost:5000')
-    
-    # Run Flask app
-    print("\n" + "="*70)
-    print(" 🎥 REAL-TIME OBJECT DETECTION & TRACKING SYSTEM")
-    print("="*70)
-    print(f" 🌐 Opening in browser: http://localhost:5000")
-    print(f" ⏱️  Started at: {datetime.now().strftime('%H:%M:%S')}")
-    print(" 📹 Accessing webcam...")
-    print(" ⌨️  Press Ctrl+C to stop")
-    print("="*70 + "\n")
-    
-    try:
-        app.run(debug=False, host='localhost', port=5000, use_reloader=False)
-    except KeyboardInterrupt:
-        print("\n\n" + "="*70)
-        print(" 🛑 Shutting down...")
-        detector_app.close()
-        print("="*70 + "\n")
+    return jsonify({
+        "frame_count": frame_count,
+        "fps": round(fps, 1),
+        "elapsed": round(elapsed, 1),
+        "detections": len(last_labels),
+        "detection_types": list(set(last_labels))
+    })
+
+
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    print("Object Detection & Tracking Started")
+    app.run(host="0.0.0.0", port=5000, debug=False)

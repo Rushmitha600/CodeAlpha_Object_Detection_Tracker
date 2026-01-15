@@ -434,7 +434,7 @@
         <!-- LEFT: VIDEO PANEL (70%) -->
         <div class="video-panel">
             <div class="video-container">
-                <img id="video-stream" src="/video_feed" alt="Live Detection Feed">
+                <img id="video-stream" src="" alt="Live Detection Feed">
             </div>
 
             <!-- Stats Bar -->
@@ -472,9 +472,10 @@
                 <div class="no-detection">Scanning...</div>
             </div>
             <div class="buttons">
-                <button class="btn-primary" onclick="refreshStats()">🔄 Refresh</button>
-                <button class="btn-secondary" onclick="location.reload()">↻ Reload</button>
-            </div>
+    <button class="btn-primary" onclick="startSampleVideo()">▶ Sample Video</button>
+    <button class="btn-secondary" onclick="startWebcam()">📷 Webcam</button>
+</div>
+
         </div>
     </div>
 
@@ -533,5 +534,20 @@
             console.log('✅ Detection System loaded');
         });
     </script>
+
+<script>
+    const videoImg = document.getElementById("video-stream");
+
+    function startWebcam() {
+        videoImg.src = "/video_feed/webcam";
+        console.log("Webcam started");
+    }
+
+    function startSampleVideo() {
+        videoImg.src = "/video_feed/video";
+        console.log("Sample video started");
+    }
+</script>
+
 </body>
 </html>
